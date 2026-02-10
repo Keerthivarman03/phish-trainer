@@ -1,95 +1,115 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Shield } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ShieldAlert, Terminal, Lock } from "lucide-react";
+import { motion } from "framer-motion";
 
 const AdminLogin = () => {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  // Clear any existing session on mount to ensure clean login
+  useEffect(() => {
+    supabase.auth.signOut();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg(null);
 
-    if (isSignUp) {
-      console.log("Attempting sign up with:", email);
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
+    const { data: { session }, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      console.log("Sign up result:", { data, error });
-
-      if (error) {
-        toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
-        setLoading(false);
-        return;
-      }
-
-      if (data.session) {
-        toast({ title: "Sign up successful", description: "You are now logged in." });
-        navigate("/admin");
-      } else {
-        toast({ title: "Sign up successful", description: "Please check your email to confirm your account." });
-        setIsSignUp(false); // Switch back to login after successful signup
-      }
+    if (error) {
+      setErrorMsg(error.message);
       setLoading(false);
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-      if (error) {
-        toast({ title: "Login failed", description: error.message, variant: "destructive" });
-        setLoading(false);
-        return;
-      }
-
+    } else if (session) {
+      // Just check if there's a user - no strict DB role yet to unblock dev
       navigate("/admin");
-      setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <Shield className="mx-auto mb-2 h-10 w-10 text-primary" />
-          <CardTitle className="text-2xl">{isSignUp ? "Admin Sign Up" : "Admin Login"}</CardTitle>
-          <p className="text-sm text-muted-foreground">Phishing Simulation Dashboard</p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (isSignUp ? "Signing up..." : "Signing in...") : (isSignUp ? "Sign Up" : "Sign In")}
-            </Button>
-            <div className="text-center text-sm">
-              <button
-                type="button"
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-primary hover:underline"
-              >
-                {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
-              </button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 relative overflow-hidden">
+      {/* Background Matrix-like effect */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900 via-zinc-950 to-zinc-950" />
+
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className="w-full max-w-lg z-10"
+      >
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-blue-600/10 border border-blue-500/20 mb-4">
+            <ShieldAlert className="h-8 w-8 text-blue-500" />
+          </div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">PhishTrainer Command</h1>
+          <p className="text-zinc-400 mt-2">Authorized Access Only</p>
+        </div>
+
+        <Card className="bg-zinc-900/50 border-zinc-800 shadow-2xl backdrop-blur-xl">
+          <CardHeader>
+            <CardTitle className="text-xl text-white">System Login</CardTitle>
+            <CardDescription className="text-zinc-500">Enter your administrative credentials</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              {errorMsg && (
+                <Alert variant="destructive" className="bg-red-900/20 border-red-900/50 text-red-200">
+                  <AlertDescription>{errorMsg}</AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-zinc-300">Admin Email</Label>
+                <div className="relative">
+                  <Terminal className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="admin@system.local"
+                    className="pl-9 bg-zinc-950/50 border-zinc-800 text-white focus:border-blue-500 focus:ring-blue-500/20"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-zinc-300">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <Input
+                    id="password"
+                    type="password"
+                    className="pl-9 bg-zinc-950/50 border-zinc-800 text-white focus:border-blue-500 focus:ring-blue-500/20"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white" disabled={loading}>
+                {loading ? "Authenticating..." : "Establish Session"}
+              </Button>
+            </form>
+          </CardContent>
+          <CardFooter className="flex justify-center border-t border-zinc-800 py-4">
+            <span className="text-xs text-zinc-600">Secure Environment v1.0.4</span>
+          </CardFooter>
+        </Card>
+      </motion.div>
     </div>
   );
 };
