@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ShieldAlert, Terminal, Lock } from "lucide-react";
+import { ShieldAlert, Terminal, Lock, Eye, EyeOff } from "lucide-react";
 import { motion } from "framer-motion";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLogin, setIsLogin] = useState(true);
@@ -114,13 +115,20 @@ const AdminLogin = () => {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
                     id="password"
-                    type="password"
-                    className="pl-9 bg-zinc-950/50 border-zinc-800 text-white focus:border-blue-500 focus:ring-blue-500/20"
+                    type={showPassword ? "text" : "password"}
+                    className="pl-9 pr-10 bg-zinc-950/50 border-zinc-800 text-white focus:border-blue-500 focus:ring-blue-500/20"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={6}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
               <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white" disabled={loading}>

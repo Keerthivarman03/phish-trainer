@@ -42,6 +42,7 @@ const Campaigns = () => {
       const { data: campaignData, error } = await supabase
         .from("campaigns")
         .select("*")
+        .eq("created_by", user.id)
         .order("created_at", { ascending: false });
 
       if (error) {
