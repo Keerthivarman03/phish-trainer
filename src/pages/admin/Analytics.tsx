@@ -10,27 +10,52 @@ import type { Tables } from "@/integrations/supabase/types";
 const COLORS = ["hsl(var(--primary))", "hsl(var(--destructive))", "hsl(var(--accent))", "#f59e0b", "#10b981", "#8b5cf6"];
 
 const Analytics = () => {
-  useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [attempts, setAttempts] = useState<Tables<"login_attempts">[]>([]);
   const [campaigns, setCampaigns] = useState<Tables<"campaigns">[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState("all");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data: c } = await supabase.from("campaigns").select("*");
-      if (c) setCampaigns(c);
-
-      let query = supabase.from("login_attempts").select("*").order("created_at");
-      if (selectedCampaign !== "all") {
-        query = query.eq("campaign_id", selectedCampaign);
+    const fetchData = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
       }
-      const { data } = await query;
-      if (data) setAttempts(data);
-      setLoading(false);
+
+      setLoading(true);
+
+      try {
+        console.log("Fetching analytics...");
+
+        const { data: c, error: cError } = await supabase
+          .from("campaigns")
+          .select("*");
+
+        if (cError) console.error("Analytics campaign error:", cError);
+        if (c) setCampaigns(c);
+
+        let query = supabase.from("login_attempts").select("*").order("created_at");
+        if (selectedCampaign !== "all") {
+          query = query.eq("campaign_id", selectedCampaign);
+        }
+
+        const { data, error: aError } = await query;
+
+        if (aError) console.error("Analytics attempt error:", aError);
+        if (data) setAttempts(data);
+
+      } catch (err) {
+        console.error("Critical error in Analytics fetch:", err);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetch();
-  }, [selectedCampaign]);
+
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [selectedCampaign, authLoading, user]); // Include user
 
   // Attempts over time (by day)
   const timeData = attempts.reduce<Record<string, number>>((acc, a) => {

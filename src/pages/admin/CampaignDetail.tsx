@@ -12,7 +12,7 @@ import type { Tables } from "@/integrations/supabase/types";
 type Attempt = Tables<"login_attempts">;
 
 const CampaignDetail = () => {
-  useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { id } = useParams<{ id: string }>();
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [campaignName, setCampaignName] = useState("");
@@ -20,22 +20,45 @@ const CampaignDetail = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      if (!id) return;
-      const { data: campaign } = await supabase.from("campaigns").select("name").eq("id", id).maybeSingle();
-      if (campaign) setCampaignName(campaign.name);
+    const fetchDetail = async () => {
+      if (!id || !user) {
+        setLoading(false);
+        return;
+      }
 
-      const { data } = await supabase
-        .from("login_attempts")
-        .select("*")
-        .eq("campaign_id", id)
-        .order("created_at", { ascending: false });
+      setLoading(true);
 
-      if (data) setAttempts(data);
-      setLoading(false);
+      try {
+        // Fetch campaign name
+        const { data: campaign } = await supabase
+          .from("campaigns")
+          .select("name")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (campaign) setCampaignName(campaign.name);
+
+        // Fetch attempts
+        const { data, error } = await supabase
+          .from("login_attempts")
+          .select("*")
+          .eq("campaign_id", id)
+          .order("created_at", { ascending: false });
+
+        if (error) console.error("Error fetching detail:", error);
+        if (data) setAttempts(data);
+
+      } catch (err) {
+        console.error("Critical error in detail fetch:", err);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetch();
-  }, [id]);
+
+    if (!authLoading) {
+      fetchDetail();
+    }
+  }, [id, authLoading, user]); // Include user
 
   const filtered = attempts.filter(
     (a) =>
@@ -96,7 +119,9 @@ const CampaignDetail = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading...</p>
+          <div className="flex flex-col items-center justify-center space-y-4 py-8">
+            <p className="text-muted-foreground">Loading details...</p>
+          </div>
         ) : (
           <div className="rounded-md border">
             <Table>

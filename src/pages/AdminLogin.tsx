@@ -9,26 +9,52 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 const AdminLogin = () => {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (isSignUp) {
+      console.log("Attempting sign up with:", email);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-    if (error) {
-      toast({ title: "Login failed", description: error.message, variant: "destructive" });
+      console.log("Sign up result:", { data, error });
+
+      if (error) {
+        toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      if (data.session) {
+        toast({ title: "Sign up successful", description: "You are now logged in." });
+        navigate("/admin");
+      } else {
+        toast({ title: "Sign up successful", description: "Please check your email to confirm your account." });
+        setIsSignUp(false); // Switch back to login after successful signup
+      }
       setLoading(false);
-      return;
-    }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    navigate("/admin");
-    setLoading(false);
+      if (error) {
+        toast({ title: "Login failed", description: error.message, variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      navigate("/admin");
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,11 +62,11 @@ const AdminLogin = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <Shield className="mx-auto mb-2 h-10 w-10 text-primary" />
-          <CardTitle className="text-2xl">Admin Login</CardTitle>
+          <CardTitle className="text-2xl">{isSignUp ? "Admin Sign Up" : "Admin Login"}</CardTitle>
           <p className="text-sm text-muted-foreground">Phishing Simulation Dashboard</p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -50,8 +76,17 @@ const AdminLogin = () => {
               <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? (isSignUp ? "Signing up..." : "Signing in...") : (isSignUp ? "Sign Up" : "Sign In")}
             </Button>
+            <div className="text-center text-sm">
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-primary hover:underline"
+              >
+                {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
+              </button>
+            </div>
           </form>
         </CardContent>
       </Card>
