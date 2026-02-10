@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ExternalLink, Trash2 } from "lucide-react";
+import { Plus, ExternalLink, Trash2, RefreshCw } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Campaign = Tables<"campaigns"> & { attempt_count?: number };
@@ -26,6 +26,8 @@ const Campaigns = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fetchCampaigns = async () => {
+    // If auth is still loading, wait. If no user, we can't fetch.
+    if (authLoading) return;
     if (!user) {
       setLoading(false);
       return;
@@ -35,7 +37,7 @@ const Campaigns = () => {
     setErrorMsg(null);
 
     try {
-      console.log("Fetching campaigns...");
+      console.log("Fetching campaigns for user:", user.id);
 
       const { data: campaignData, error } = await supabase
         .from("campaigns")
@@ -45,13 +47,14 @@ const Campaigns = () => {
       if (error) {
         console.error("Campaign fetch error:", error);
         setErrorMsg(error.message);
-        setCampaigns([]);
+        // Do NOT clear campaigns on error - keep stale data if possible
+        // setCampaigns([]); 
         setLoading(false);
         return;
       }
 
       if (campaignData) {
-        console.log("Campaigns fetched:", campaignData.length);
+        console.log("Campaigns fetched from DB:", campaignData.length);
 
         // Fetch counts for each campaign
         const withCounts = await Promise.all(
@@ -82,37 +85,28 @@ const Campaigns = () => {
 
   // Fetch when component mounts AND when user/authLoading changes
   useEffect(() => {
-    console.log("Campaigns useEffect triggered", { authLoading, user: !!user });
-    if (!authLoading) {
-      if (user) {
-        fetchCampaigns();
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [authLoading, user]); // Include user in dependencies
-
-  // HARD TIMEOUT: Force loading to false after 5 seconds no matter what
-  useEffect(() => {
-    const hardTimeout = setTimeout(() => {
-      console.warn("HARD TIMEOUT: Forcing loading to false");
+    if (!authLoading && user?.id) {
+      fetchCampaigns();
+    } else if (!authLoading && !user) {
       setLoading(false);
-    }, 5000);
-    return () => clearTimeout(hardTimeout);
-  }, []);
+    }
+  }, [authLoading, user?.id]);
+
+  const handleManualRefresh = () => {
+    fetchCampaigns();
+    toast({ title: "Refreshing..." });
+  };
 
   const createCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    console.log("Creating campaign with:", { name, description, user_id: user.id });
+    // Optimistic UI could be added here, but let's stick to safe DB ops
     const { data: result, error } = await supabase.from("campaigns").insert({
       name,
       description,
       created_by: user.id,
     }).select();
-
-    console.log("Campaign creation result:", { result, error });
 
     if (error) {
       console.error("Supabase error:", error);
@@ -123,7 +117,10 @@ const Campaigns = () => {
     setName("");
     setDescription("");
     setDialogOpen(false);
-    fetchCampaigns();
+    // Add a small delay to ensure DB propagation before fetching
+    setTimeout(() => {
+      fetchCampaigns();
+    }, 500);
     toast({ title: "Campaign created" });
   };
 
@@ -147,30 +144,35 @@ const Campaigns = () => {
             <h1 className="text-3xl font-bold text-foreground">Campaigns</h1>
             <p className="text-muted-foreground">Manage your phishing simulation campaigns</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" />New Campaign</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create Campaign</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={createCampaign} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} />
-                </div>
-                <Button type="submit" className="w-full">Create</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={handleManualRefresh} title="Refresh List">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" />New Campaign</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create Campaign</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={createCampaign} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} />
+                  </div>
+                  <Button type="submit" className="w-full">Create</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {loading ? (
+        {loading && campaigns.length === 0 ? (
           <div className="flex flex-col items-center justify-center space-y-4 py-8">
             <p className="text-muted-foreground">Loading campaigns...</p>
           </div>
@@ -185,7 +187,7 @@ const Campaigns = () => {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 space-y-4">
               <p className="text-muted-foreground">No campaigns yet. Create your first one!</p>
-              <Button variant="outline" onClick={fetchCampaigns}>
+              <Button variant="outline" onClick={handleManualRefresh}>
                 Refresh List
               </Button>
             </CardContent>

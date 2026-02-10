@@ -18,6 +18,7 @@ const Analytics = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      // If no user is logged in, stop loading and return
       if (!user) {
         setLoading(false);
         return;
@@ -52,10 +53,11 @@ const Analytics = () => {
       }
     };
 
+    // Only fetch when auth is ready
     if (!authLoading) {
       fetchData();
     }
-  }, [selectedCampaign, authLoading, user]); // Include user
+  }, [selectedCampaign, authLoading, user?.id]); // ✅ Fix: Use user.id (stable) instead of user object
 
   // Attempts over time (by day)
   const timeData = attempts.reduce<Record<string, number>>((acc, a) => {

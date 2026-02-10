@@ -6,7 +6,7 @@ import AdminLayout from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Download, Search } from "lucide-react";
+import { ArrowLeft, Download, RefreshCw, Search } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Attempt = Tables<"login_attempts">;
@@ -19,46 +19,53 @@ const CampaignDetail = () => {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchDetail = async () => {
-      if (!id || !user) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-
-      try {
-        // Fetch campaign name
-        const { data: campaign } = await supabase
-          .from("campaigns")
-          .select("name")
-          .eq("id", id)
-          .maybeSingle();
-
-        if (campaign) setCampaignName(campaign.name);
-
-        // Fetch attempts
-        const { data, error } = await supabase
-          .from("login_attempts")
-          .select("*")
-          .eq("campaign_id", id)
-          .order("created_at", { ascending: false });
-
-        if (error) console.error("Error fetching detail:", error);
-        if (data) setAttempts(data);
-
-      } catch (err) {
-        console.error("Critical error in detail fetch:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (!authLoading) {
-      fetchDetail();
+  const fetchDetail = async () => {
+    if (!id || !user) {
+      setLoading(false);
+      return;
     }
-  }, [id, authLoading, user]); // Include user
+
+    setLoading(true);
+
+    try {
+      // Fetch campaign name
+      const { data: campaign } = await supabase
+        .from("campaigns")
+        .select("name")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (campaign) setCampaignName(campaign.name);
+
+      // Fetch attempts
+      const { data, error } = await supabase
+        .from("login_attempts")
+        .select("*")
+        .eq("campaign_id", id)
+        .order("created_at", { ascending: false });
+
+      if (error) console.error("Error fetching detail:", error);
+      if (data) setAttempts(data);
+
+    } catch (err) {
+      console.error("Critical error in detail fetch:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Only run fetch if auth is done loading
+    if (!authLoading && user?.id) {
+      fetchDetail();
+    } else if (!authLoading && !user) {
+      setLoading(false);
+    }
+  }, [id, authLoading, user?.id]);
+
+  const handleRefresh = () => {
+    fetchDetail();
+  };
 
   const filtered = attempts.filter(
     (a) =>
@@ -103,9 +110,14 @@ const CampaignDetail = () => {
             <h1 className="text-2xl font-bold text-foreground">{campaignName || "Campaign"}</h1>
             <p className="text-sm text-muted-foreground">{filtered.length} attempt(s)</p>
           </div>
-          <Button variant="outline" size="sm" onClick={exportCSV}>
-            <Download className="mr-2 h-4 w-4" />CSV Export
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleRefresh}>
+              <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCSV}>
+              <Download className="mr-2 h-4 w-4" />CSV Export
+            </Button>
+          </div>
         </div>
 
         <div className="relative">
