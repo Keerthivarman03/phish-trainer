@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,33 +15,53 @@ const AdminLogin = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isLogin, setIsLogin] = useState(true);
 
   // Clear any existing session on mount to ensure clean login
   useEffect(() => {
     supabase.auth.signOut();
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
 
-    const { data: { session }, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      if (isLogin) {
+        // LOGIN
+        const { data: { session }, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-    if (error) {
+        if (error) throw error;
+        if (session) navigate("/admin");
+      } else {
+        // SIGN UP
+        const { data: { session }, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        if (session) {
+          navigate("/admin");
+        } else {
+          // If session is null, email confirmation is likely required (unless disabled in dashboard)
+          setErrorMsg("Account created! If not redirected, check email or disable verification in Supabase.");
+        }
+      }
+    } catch (error: any) {
       setErrorMsg(error.message);
+    } finally {
       setLoading(false);
-    } else if (session) {
-      // Just check if there's a user - no strict DB role yet to unblock dev
-      navigate("/admin");
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 relative overflow-hidden font-sans">
       {/* Background Matrix-like effect */}
       <div className="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900 via-zinc-950 to-zinc-950" />
 
@@ -56,18 +76,20 @@ const AdminLogin = () => {
             <ShieldAlert className="h-8 w-8 text-blue-500" />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">PhishTrainer Command</h1>
-          <p className="text-zinc-400 mt-2">Authorized Access Only</p>
+          <p className="text-zinc-400 mt-2">{isLogin ? "Authorized Access Only" : "Initialize New Operator"}</p>
         </div>
 
         <Card className="bg-zinc-900/50 border-zinc-800 shadow-2xl backdrop-blur-xl">
           <CardHeader>
-            <CardTitle className="text-xl text-white">System Login</CardTitle>
-            <CardDescription className="text-zinc-500">Enter your administrative credentials</CardDescription>
+            <CardTitle className="text-xl text-white">{isLogin ? "System Login" : "Create Identity"}</CardTitle>
+            <CardDescription className="text-zinc-500">
+              {isLogin ? "Enter your administrative credentials" : "Register a new administrator account"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleAuth} className="space-y-4">
               {errorMsg && (
-                <Alert variant="destructive" className="bg-red-900/20 border-red-900/50 text-red-200">
+                <Alert variant={errorMsg.includes("Account created") ? "default" : "destructive"} className={errorMsg.includes("Account created") ? "bg-green-900/20 border-green-900/50 text-green-200" : "bg-red-900/20 border-red-900/50 text-red-200"}>
                   <AlertDescription>{errorMsg}</AlertDescription>
                 </Alert>
               )}
@@ -97,15 +119,23 @@ const AdminLogin = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    minLength={6}
                   />
                 </div>
               </div>
               <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white" disabled={loading}>
-                {loading ? "Authenticating..." : "Establish Session"}
+                {loading ? "Processing..." : (isLogin ? "Establish Session" : "Register System")}
               </Button>
             </form>
           </CardContent>
-          <CardFooter className="flex justify-center border-t border-zinc-800 py-4">
+          <CardFooter className="flex flex-col gap-4 border-t border-zinc-800 py-4">
+            <button
+              type="button"
+              onClick={() => { setIsLogin(!isLogin); setErrorMsg(null); }}
+              className="text-sm text-blue-400 hover:text-blue-300 underline underline-offset-4"
+            >
+              {isLogin ? "Need a new account? Initialize Identity" : "Already registered? Establish Session"}
+            </button>
             <span className="text-xs text-zinc-600">Secure Environment v1.0.4</span>
           </CardFooter>
         </Card>
