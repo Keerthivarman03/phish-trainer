@@ -31,7 +31,8 @@ const Analytics = () => {
 
         const { data: c, error: cError } = await supabase
           .from("campaigns")
-          .select("*");
+          .select("*")
+          .eq("created_by", user.id);
 
         if (cError) console.error("Analytics campaign error:", cError);
         if (c) setCampaigns(c);
@@ -39,6 +40,17 @@ const Analytics = () => {
         let query = supabase.from("login_attempts").select("*").order("created_at");
         if (selectedCampaign !== "all") {
           query = query.eq("campaign_id", selectedCampaign);
+        } else if (c && c.length > 0) {
+          // If "all" is selected, only show attempts for campaigns owned by this user
+          const userCampaignIds = c.map(campaign => campaign.id);
+          query = query.in("campaign_id", userCampaignIds);
+        } else {
+          // User has no campaigns, so they should see no attempts
+          // We can force an empty result by querying for a non-existent ID or just returning early
+          // But effectively, if c is empty, we just won't show anything relevant or we can explicitly handle it
+          setAttempts([]);
+          setLoading(false);
+          return;
         }
 
         const { data, error: aError } = await query;
